@@ -16,7 +16,7 @@ class Point2D(object):
         return Point2D(self.x + other.x, self.y + other.y)
 
     def __str__(self):
-        return f"({self.x}, {self.y})"
+        return f"({self.x:.3f},{self.y:.3f})"
 
     def __truediv__(self, c: float):
         return Point2D(self.x / c, self.y / c)
@@ -246,17 +246,17 @@ def draw_lines(lines, points, bounds=None):
     lines : iterable
         Iterable of objects with attributes: p1.x, p1.y, p2.x, p2.y.
     """
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(dpi=300)
     fig.patch.set_facecolor('black')
     ax.set_facecolor("black")
 
     for line in lines:
         x_values = [line.p1.x, line.p2.x]
         y_values = [line.p1.y, line.p2.y]
-        ax.plot(x_values, y_values, color="white")
+        ax.plot(x_values, y_values, color="white", linewidth=0.5)
 
     for point in points:
-        ax.scatter(point.x, point.y, color="white")
+        ax.scatter(point.x, point.y, color="white", s=0.5)
 
     if bounds is None:
         ax.autoscale_view()
@@ -289,7 +289,7 @@ board = Board.randomPoints(Bounds(-50, 50, -50, 50), 60)
 for i in range(1000):
     if not board.addWeightedConnection():
        break
-    if i % 25 == 0:
+    if i % 50 == 0:
         board.draw()
 board.draw()
 
