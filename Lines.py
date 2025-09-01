@@ -27,6 +27,13 @@ class Point2D(object):
     def __hash__(self):
         return hash((self.x, self.y))
 
+    def __iter__(self):
+        yield self.x
+        yield self.y
+
+    def __lt__(self, other):
+        return tuple(self) < tuple(other)
+
     @staticmethod
     def distance(p1, p2):
         return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
@@ -43,10 +50,17 @@ class Point2D(object):
 
 class Line(object):
     def __init__(self, p1, p2):
-        if p1.x > p2.x: # p1 is not right of p2
+        if p1 > p2: # p1 is not right of p2
             p1, p2 = p2, p1
         self.p1 = p1
         self.p2 = p2
+
+    def __iter__(self):
+        yield self.p1
+        yield self.p2
+
+    def __lt__(self, other):
+        return tuple(self) < tuple(other)
 
     def dir(self):
         return (self.p2 - self.p1).unit()
@@ -74,13 +88,23 @@ class Line(object):
         return Bounds(*self.leftRightBounds(), *self.bottomTopBounds())
 
     @staticmethod
-    def collides(l1, l2):
+    def collides(l1, l2, padding=0.0):
         intercept = Line.intercept(l1, l2)
-        if intercept is None: return False
+        if intercept is None:
+            return l1 == l2
+            # TODO: Properly handle this
+            #s1, i1 = l1.slopeIntercept()
+            #s2, i2 = l2.slopeIntercept()
+            # TODO: handle perfectly vertical
+            #if s1 == s2 and i1 == i2:
+            #    if s1 == math.inf:
+            #        return l1.x == l2.x and
+            #if s1 == s2:
+            #    if i1 != i2:
         for line in (l1, l2):
             left, right, bottom, top = line.bounds()
-            if not (left < intercept.x < right and
-                    bottom < intercept.y < top):
+            if not (left + padding < intercept.x < right - padding and
+                    bottom + padding < intercept.y < top - padding):
                 return False
         return True
 
@@ -100,6 +124,12 @@ class Line(object):
         x = det(d, xdiff) / div
         y = det(d, ydiff) / div
         return Point2D(x, y)
+
+    def __str__(self):
+        return f"<{self.p1}--{self.p2}>"
+
+    def __repr__(self):
+        return str(self)
 
 
 class Bounds(object):
@@ -148,8 +178,10 @@ class Board(object):
         self.points = points
         self.bounds = bounds
 
+        self.tried = set()
+
     def lineIntersectsAny(self, line: Line):
-        return any(Line.collides(l, line) for l in self.lines)
+        return any(Line.collides(l, line, 1e-6) for l in self.lines)
 
     @staticmethod
     def randomPoints(bounds: Bounds, n: int):
@@ -173,11 +205,10 @@ class Board(object):
         return scores
 
     def randomNonCollidingConnection(self):
-        tried = set()
-        while len(tried) < len(self.points):
+        while len(self.tried) < len(self.points):
             idx = self.randomPointIdx()
-            if idx in tried: continue
-            tried.add(idx)
+            if idx in self.tried: continue
+            #self.tried.add(idx)
             p = self.points[idx]
 
             idxsAndProbs = self.pointConnectionProbabilities(idx)
@@ -194,8 +225,7 @@ class Board(object):
                 else:
                     failed += 1
                     weights[candidate] = 0.0
-
-            tried.add(idx)
+            self.tried.add(idx)
 
     def addWeightedConnection(self):
         line = self.randomNonCollidingConnection()
@@ -255,10 +285,16 @@ def draw_lines(lines, points, bounds=None):
     plt.show()
 
 
-board = Board.randomPoints(Bounds(-50, 50, -50, 50), 100)
-for _ in range(100):
-    board.addWeightedConnection()
-    board.draw()
+board = Board.randomPoints(Bounds(-50, 50, -50, 50), 60)
+for i in range(1000):
+    if not board.addWeightedConnection():
+       break
+    if i % 25 == 0:
+        board.draw()
+board.draw()
+
+sl = sorted(board.lines)
+print(sl)
 exit(0)
 
 
