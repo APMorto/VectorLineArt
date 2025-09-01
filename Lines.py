@@ -1,5 +1,6 @@
 import math
-from typing import Optional
+import random
+from typing import Optional, Union
 import matplotlib.pyplot as plt
 
 
@@ -36,6 +37,9 @@ class Point2D(object):
     def unit(self):
         return self / self.norm()
 
+    def bounds(self):
+        return Bounds(self.x, self.x, self.y, self.y)
+
 
 class Line(object):
     def __init__(self, p1, p2):
@@ -66,15 +70,17 @@ class Line(object):
     def bottomTopBounds(self):
         return min(self.p1.y, self.p2.y), max(self.p1.y, self.p2.y)
 
+    def bounds(self):
+        return Bounds(*self.leftRightBounds(), *self.bottomTopBounds())
+
     @staticmethod
     def collides(l1, l2):
         intercept = Line.intercept(l1, l2)
+        if intercept is None: return False
         for line in (l1, l2):
-            left, right = line.leftRightBounds()
-            if not left <= intercept.x <= right:
-                return False
-            bottom, top = line.bottomTopBounds()
-            if not bottom <= intercept.y <= top:
+            left, right, bottom, top = line.bounds()
+            if not (left < intercept.x < right and
+                    bottom < intercept.y < top):
                 return False
         return True
 
@@ -96,7 +102,111 @@ class Line(object):
         return Point2D(x, y)
 
 
-def draw_lines(lines, points):
+class Bounds(object):
+    def __init__(self, left, right, bottom, top):
+        self.left = left
+        self.right = right
+        self.bottom = bottom
+        self.top = top
+        assert left <= right and bottom <= top
+
+    def bounds(self):
+        return self
+
+    def expand(self, other: Union[Point2D, Line, "Bounds"]):
+        otherBounds = other.bounds()
+        self.left = min(self.left, otherBounds.left)
+        self.right = max(self.right, otherBounds.right)
+        self.bottom = max(self.bottom, otherBounds.bottom)
+        self.top = max(self.top, otherBounds.top)
+
+    def randomPoint(self):
+        return Point2D(random.uniform(self.left, self.right), random.uniform(self.bottom, self.top))
+
+    def randomPoints(self, n: int):
+        return [self.randomPoint() for _ in range(n)]
+
+    def __add__(self, other):
+        return self.expand(other)
+
+    def __iter__(self):
+        yield self.left
+        yield self.right
+        yield self.bottom
+        yield self.top
+
+
+class Board(object):
+    def __init__(self, lines=None, points=None, bounds=None, seed=None):
+        if bounds is None:
+            bounds = Bounds(0, 0, 0, 0)
+        if lines is None:
+            lines = []
+        if points is None:
+            points = []
+        self.lines = lines
+        self.points = points
+        self.bounds = bounds
+
+    def lineIntersectsAny(self, line: Line):
+        return any(Line.collides(l, line) for l in self.lines)
+
+    @staticmethod
+    def randomPoints(bounds: Bounds, n: int):
+        points = bounds.randomPoints(n)
+        return Board([], points, bounds)
+
+    def draw(self):
+        draw_lines(self.lines, self.points, self.bounds)
+
+    def randomPointIdx(self):
+        return random.randrange(0, len(self.points))
+
+    def distancesToPoint(self, p):
+        return [Point2D.distance(p, self.points[i]) for i in range(len(self.points))]
+
+    def pointConnectionProbabilities(self, idx: int):
+        p = self.points[idx]
+        distances = self.distancesToPoint(p)
+
+        scores = [(i, 1.0 / (d**2)) for i, d in enumerate(distances) if i != idx]
+        return scores
+
+    def randomNonCollidingConnection(self):
+        tried = set()
+        while len(tried) < len(self.points):
+            idx = self.randomPointIdx()
+            if idx in tried: continue
+            tried.add(idx)
+            p = self.points[idx]
+
+            idxsAndProbs = self.pointConnectionProbabilities(idx)
+            failed = 0
+            weights = [w for i, w in idxsAndProbs]
+            while failed < len(idxsAndProbs):
+                candidate = random.choices(range(len(weights)), weights=weights, k=1)[0]
+                chosenPoint = self.points[idxsAndProbs[candidate][0]]
+
+
+                linesCandidate = Line(p, chosenPoint)
+                if not self.lineIntersectsAny(linesCandidate):
+                    return linesCandidate
+                else:
+                    failed += 1
+                    weights[candidate] = 0.0
+
+            tried.add(idx)
+
+    def addWeightedConnection(self):
+        line = self.randomNonCollidingConnection()
+        if line is not None:
+            self.lines.append(line)
+            return True
+        else:
+            return False
+
+
+def draw_lines(lines, points, bounds=None):
     """
     Draws white lines on a black background using matplotlib.
     The figure is interactive (zoom, pan, save).
@@ -118,8 +228,13 @@ def draw_lines(lines, points):
     for point in points:
         ax.scatter(point.x, point.y, color="white")
 
-    ax.autoscale_view()
-    ax.set_aspect("equal", adjustable="datalim")
+    if bounds is None:
+        ax.autoscale_view()
+        ax.set_aspect("equal", adjustable="datalim")
+    else:
+        pad = 1
+        ax.set_xlim(bounds.left-pad, bounds.right+pad)
+        ax.set_ylim(bounds.bottom-pad, bounds.top+pad)
     ax.axis("off")
 
     # --- Event handler ---
@@ -127,10 +242,24 @@ def draw_lines(lines, points):
         if event.inaxes == ax:
             print(f"Clicked at data coords: ({event.xdata:.3f}, {event.ydata:.3f})")
 
+    def on_key(event):
+        """Handle key press events."""
+        if event.key in ("enter", "return"):
+            print("[LineViewer] Enter pressed -> closing window")
+            plt.close(fig)
+
     # Connect the handler
     fig.canvas.mpl_connect("button_press_event", on_click)
+    fig.canvas.mpl_connect("key_press_event", on_key)
 
     plt.show()
+
+
+board = Board.randomPoints(Bounds(-50, 50, -50, 50), 100)
+for _ in range(100):
+    board.addWeightedConnection()
+    board.draw()
+exit(0)
 
 
 origin = Point2D(0, 0)
