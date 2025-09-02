@@ -59,6 +59,9 @@ class Line(object):
         yield self.p1
         yield self.p2
 
+    def __eq__(self, other):
+        return self.p1 == other.p1 and self.p2 == other.p2
+
     def __lt__(self, other):
         return tuple(self) < tuple(other)
 
@@ -125,6 +128,14 @@ class Line(object):
         y = det(d, ydiff) / div
         return Point2D(x, y)
 
+    @staticmethod
+    def sharesVertex(l1, l2):
+        for p1 in l1:
+            for p2 in l2:
+                if p1 == p2:
+                    return True
+        return False
+
     def __str__(self):
         return f"<{self.p1}--{self.p2}>"
 
@@ -143,12 +154,13 @@ class Bounds(object):
     def bounds(self):
         return self
 
-    def expand(self, other: Union[Point2D, Line, "Bounds"]):
+    def expanded(self, other: Union[Point2D, Line, "Bounds"]):
         otherBounds = other.bounds()
-        self.left = min(self.left, otherBounds.left)
-        self.right = max(self.right, otherBounds.right)
-        self.bottom = max(self.bottom, otherBounds.bottom)
-        self.top = max(self.top, otherBounds.top)
+        left = min(self.left, otherBounds.left)
+        right = max(self.right, otherBounds.right)
+        bottom = min(self.bottom, otherBounds.bottom)
+        top = max(self.top, otherBounds.top)
+        return Bounds(left, right, bottom, top)
 
     def randomPoint(self):
         return Point2D(random.uniform(self.left, self.right), random.uniform(self.bottom, self.top))
@@ -157,13 +169,21 @@ class Bounds(object):
         return [self.randomPoint() for _ in range(n)]
 
     def __add__(self, other):
-        return self.expand(other)
+        return self.expanded(other)
 
     def __iter__(self):
         yield self.left
         yield self.right
         yield self.bottom
         yield self.top
+
+    @staticmethod
+    def intersects(b1, b2):
+        return b1.left <= b2.right and b1.right >= b2.left and b1.bottom <= b2.top and b1.top >= b2.bottom
+
+    def __str__(self):
+        return f"<{self.left}--{self.right}--{self.bottom}--{self.top}>"
+    __repr__ = __str__
 
 
 class Board(object):
@@ -181,11 +201,16 @@ class Board(object):
         self.tried = set()
 
     def lineIntersectsAny(self, line: Line):
-        return any(Line.collides(l, line, 1e-6) for l in self.lines)
+        # If it shares a vertex, it does not intersect. Don't forget duplicates though.
+        if line in self.lines: return True
+        return any(not Line.sharesVertex(l, line) and Line.collides(l, line, 1e-6) for l in self.lines)
 
     @staticmethod
     def randomPoints(bounds: Bounds, n: int):
         points = bounds.randomPoints(n)
+        numPoints = len(points)
+        numUniquePoints = len(set(points))
+        print(f"Points: {numPoints}, Unique Points: {numUniquePoints}")
         return Board([], points, bounds)
 
     def draw(self):
@@ -272,6 +297,11 @@ def draw_lines(lines, points, bounds=None):
         if event.inaxes == ax:
             print(f"Clicked at data coords: ({event.xdata:.3f}, {event.ydata:.3f})")
 
+            # Experimental, draws point where clicked.
+            ax.scatter(event.xdata, event.ydata, color="white", s=0.5)
+            plt.show()
+
+
     def on_key(event):
         """Handle key press events."""
         if event.key in ("enter", "return"):
@@ -285,7 +315,7 @@ def draw_lines(lines, points, bounds=None):
     plt.show()
 
 
-board = Board.randomPoints(Bounds(-50, 50, -50, 50), 60)
+board = Board.randomPoints(Bounds(-50, 50, -50, 50), 100)
 for i in range(1000):
     if not board.addWeightedConnection():
        break
@@ -296,21 +326,3 @@ board.draw()
 sl = sorted(board.lines)
 print(sl)
 exit(0)
-
-
-origin = Point2D(0, 0)
-a = Point2D(10, 20)
-
-down = Point2D(0, -20)
-left = Point2D(-14, 1)
-
-l1 = Line(origin, down)
-l2 = Line(left, a)
-
-print(Line.intercept(l1, l2))
-print(Line.collides(l1, l2))
-l3 = Line(origin, Point2D(0, 20))
-print(Line.collides(l3, l2))
-
-draw_lines((l1, l2, l3), [Line.intercept(l1, l2)])
-
