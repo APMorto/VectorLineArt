@@ -274,18 +274,18 @@ class Board(object):
         """
         fig, ax = plt.subplots(dpi=300)
         fig.patch.set_facecolor('black')
-        ax.set_facecolor("black")
 
         def make():
-            for line in lines:
+            ax.set_facecolor("black")
+            for line in self.lines:
                 x_values = [line.p1.x, line.p2.x]
                 y_values = [line.p1.y, line.p2.y]
                 ax.plot(x_values, y_values, color="white", linewidth=0.5)
 
-            for point in points:
+            for point in self.points:
                 ax.scatter(point.x, point.y, color="white", s=0.5)
 
-            if bounds is None:
+            if self.bounds is None:
                 ax.autoscale_view()
                 ax.set_aspect("equal", adjustable="datalim")
             else:
@@ -315,14 +315,11 @@ class Board(object):
                 cutLine = Line(self.drawStart, self.drawEnd)
                 #self.lines = self.lines + [cutLine]
                 self.lines = [line for line in self.lines if not Line.collides(cutLine, line)]
-                #fig.clear()
-                #make()
-                #plt.show()
-                plt.close(fig)
-                self.draw()
+                ax.clear()
+                fig.canvas.draw_idle()
+                make()
+                fig.canvas.draw()
                 self.dragging = False
-
-
 
         def on_key(event):
             """Handle key press events."""
