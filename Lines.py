@@ -200,6 +200,8 @@ class Board(object):
 
         self.tried = set()
 
+        self.dragging = False
+
     def lineIntersectsAny(self, line: Line):
         # If it shares a vertex, it does not intersect. Don't forget duplicates though.
         if line in self.lines: return True
@@ -214,7 +216,7 @@ class Board(object):
         return Board([], points, bounds)
 
     def draw(self):
-        draw_lines(self.lines, self.points, self.bounds)
+        self.draw_lines(self.lines, self.points, self.bounds)
 
     def randomPointIdx(self):
         return random.randrange(0, len(self.points))
@@ -260,67 +262,88 @@ class Board(object):
         else:
             return False
 
+    def draw_lines(self, lines, points, bounds=None):
+        """
+        Draws white lines on a black background using matplotlib.
+        The figure is interactive (zoom, pan, save).
 
-def draw_lines(lines, points, bounds=None):
-    """
-    Draws white lines on a black background using matplotlib.
-    The figure is interactive (zoom, pan, save).
+        Parameters
+        ----------
+        lines : iterable
+            Iterable of objects with attributes: p1.x, p1.y, p2.x, p2.y.
+        """
+        fig, ax = plt.subplots(dpi=300)
+        fig.patch.set_facecolor('black')
+        ax.set_facecolor("black")
 
-    Parameters
-    ----------
-    lines : iterable
-        Iterable of objects with attributes: p1.x, p1.y, p2.x, p2.y.
-    """
-    fig, ax = plt.subplots(dpi=300)
-    fig.patch.set_facecolor('black')
-    ax.set_facecolor("black")
+        def make():
+            for line in lines:
+                x_values = [line.p1.x, line.p2.x]
+                y_values = [line.p1.y, line.p2.y]
+                ax.plot(x_values, y_values, color="white", linewidth=0.5)
 
-    for line in lines:
-        x_values = [line.p1.x, line.p2.x]
-        y_values = [line.p1.y, line.p2.y]
-        ax.plot(x_values, y_values, color="white", linewidth=0.5)
+            for point in points:
+                ax.scatter(point.x, point.y, color="white", s=0.5)
 
-    for point in points:
-        ax.scatter(point.x, point.y, color="white", s=0.5)
+            if bounds is None:
+                ax.autoscale_view()
+                ax.set_aspect("equal", adjustable="datalim")
+            else:
+                pad = 1
+                ax.set_xlim(bounds.left - pad, bounds.right + pad)
+                ax.set_ylim(bounds.bottom - pad, bounds.top + pad)
+            ax.axis("off")
 
-    if bounds is None:
-        ax.autoscale_view()
-        ax.set_aspect("equal", adjustable="datalim")
-    else:
-        pad = 1
-        ax.set_xlim(bounds.left-pad, bounds.right+pad)
-        ax.set_ylim(bounds.bottom-pad, bounds.top+pad)
-    ax.axis("off")
+        make()
 
-    # --- Event handler ---
-    def on_click(event):
-        if event.inaxes == ax:
-            print(f"Clicked at data coords: ({event.xdata:.3f}, {event.ydata:.3f})")
+        # --- Event handler ---
+        def on_click(event):
+            if event.inaxes == ax:
+                print(f"Clicked at data coords: ({event.xdata:.3f}, {event.ydata:.3f})")
+                self.dragging = True
+                self.drawStart = Point2D(event.xdata, event.ydata)
 
-            # Experimental, draws point where clicked.
-            ax.scatter(event.xdata, event.ydata, color="white", s=0.5)
-            plt.show()
+                # Experimental, draws point where clicked.
+                ax.scatter(event.xdata, event.ydata, color="white", s=0.5)
+                plt.show()
+
+        def on_release(event):
+            if self.dragging and event.inaxes == ax:
+                print("Released")
+                self.drawEnd = Point2D(event.xdata, event.ydata)
+
+                cutLine = Line(self.drawStart, self.drawEnd)
+                #self.lines = self.lines + [cutLine]
+                self.lines = [line for line in self.lines if not Line.collides(cutLine, line)]
+                #fig.clear()
+                #make()
+                #plt.show()
+                plt.close(fig)
+                self.draw()
+                self.dragging = False
 
 
-    def on_key(event):
-        """Handle key press events."""
-        if event.key in ("enter", "return"):
-            print("[LineViewer] Enter pressed -> closing window")
-            plt.close(fig)
 
-    # Connect the handler
-    fig.canvas.mpl_connect("button_press_event", on_click)
-    fig.canvas.mpl_connect("key_press_event", on_key)
+        def on_key(event):
+            """Handle key press events."""
+            if event.key in ("enter", "return"):
+                print("[LineViewer] Enter pressed -> closing window")
+                plt.close(fig)
 
-    plt.show()
+        # Connect the handler
+        fig.canvas.mpl_connect("button_press_event", on_click)
+        fig.canvas.mpl_connect("key_press_event", on_key)
+        fig.canvas.mpl_connect("button_release_event", on_release)
+
+        plt.show()
 
 
 board = Board.randomPoints(Bounds(-50, 50, -50, 50), 100)
 for i in range(1000):
     if not board.addWeightedConnection():
        break
-    if i % 50 == 0:
-        board.draw()
+    #if i % 50 == 0:
+    #    board.draw()
 board.draw()
 
 sl = sorted(board.lines)
