@@ -19,8 +19,23 @@ class Board(object):
         self.bounds = bounds
 
         self.tried = set()
+        self.remaining = set(range(len(points)))
 
         self.dragging = False
+
+    def makeFullLineCandidates(self):
+        self.possible = [
+            {j: Line(p1, p2) for j, p2 in enumerate(self.points) if j != i}
+            for i, p1 in enumerate(self.points)
+        ]
+
+    def pruneToValid(self, i):
+        toRemove = []
+        for j, line in self.possible[i].items():
+            if self.lineIntersectsAny(line):
+                toRemove.append(j)
+        for gone in toRemove:
+            self.possible[i].pop(gone)
 
     def lineIntersectsAny(self, line: Line):
         # If it shares a vertex, it does not intersect. Don't forget duplicates though.
@@ -46,12 +61,17 @@ class Board(object):
         self.draw_lines(self.lines, self.points, self.bounds)
 
     def randomPointIdx(self):
+        return random.choice(tuple(self.remaining))
         return random.randrange(0, len(self.points))
 
     def distancesToPoint(self, p):
         return [Point2D.distance(p, self.points[i]) for i in range(len(self.points))]
 
     def pointConnectionProbabilities(self, idx: int):
+        if board.possible:
+            #self.pruneToValid(idx)
+            return [(i, 1.0 / line.length()**2) for i, line in self.possible[idx].items()]
+
         p = self.points[idx]
         distances = self.distancesToPoint(p)
 
@@ -70,16 +90,22 @@ class Board(object):
             weights = [w for i, w in idxsAndProbs]
             while failed < len(idxsAndProbs):
                 candidate = random.choices(range(len(weights)), weights=weights, k=1)[0]
-                chosenPoint = self.points[idxsAndProbs[candidate][0]]
-
+                chosenIdx = idxsAndProbs[candidate][0]
+                chosenPoint = self.points[chosenIdx]
 
                 linesCandidate = Line(p, chosenPoint)
                 if not self.lineIntersectsAny(linesCandidate):
                     return linesCandidate
                 else:
+                    self.possible[idx].pop(chosenIdx)
+                    self.possible[chosenIdx].pop(idx)
+                    if len(self.possible[chosenIdx]) == 0:
+                        self.tried.add(chosenIdx)
+                        self.remaining.discard(idx)
                     failed += 1
                     weights[candidate] = 0.0
             self.tried.add(idx)
+            self.remaining.remove(idx)
 
     def addWeightedConnection(self):
         line = self.randomNonCollidingConnection()
@@ -161,15 +187,40 @@ class Board(object):
 
         plt.show()
 
+    def transform_points(self, f):
+        self.points = [f(p) for p in self.points]
+
+    @staticmethod
+    def add_gaussian_noise(p: Point2D) -> Point2D:
+        x, y = p
+        x += random.gauss(0, 1)
+        y += random.gauss(0, 1)
+        return Point2D(x, y)
+
 
 #board = Board.randomPoints(Bounds(-50, 50, -50, 50), 100)
 img_path = "C:/Users/epicu/OneDrive/Documents/Siemens_onboarding/badge_photo_andrew_morton.jpg"
-board = Board.fromImg(img_path, 1500)
-for i in range(2000):
-    if not board.addWeightedConnection():
-       break
+board = Board.fromImg(img_path, 2500)
+print("Board created.")
+board.draw()
+board.transform_points(Board.add_gaussian_noise)
+print("board perturbed with gaussian noise")
+board.draw()
+print("Building full possible connections.")
+board.makeFullLineCandidates()
+print("Going on to adding connections.")
+
+for i in range(5000):
+    if i % 25 == 0: print(f"{i} / 5000")
+    try:
+        if not board.addWeightedConnection():
+            break
     #if i % 50 == 0:
     #    board.draw()
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt. Breaking from loop.")
+        break
+print("Drawing connections.")
 board.draw()
 
 sl = sorted(board.lines)

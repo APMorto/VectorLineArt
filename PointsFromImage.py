@@ -11,12 +11,12 @@ def pointsFromImage(gray_img: np.ndarray, n_points: int) -> List[Point2D]:
     # blur
     downscale_factor = 2
     pick_padding = 0
-    sigma = 3
+    sigma = 1.5
     img = skimage.filters.gaussian(gray_img, sigma=sigma)
     downscaled_image = img[::downscale_factor, ::downscale_factor]
     img = downscaled_image
     img = skimage.filters.sobel(img)
-    img = img ** 1.5
+    img = img ** 1.25
 
     plt.imshow(img)
     plt.show()
